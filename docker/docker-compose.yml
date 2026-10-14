@@ -1,0 +1,19 @@
+services:
+  groupdocs-search-mcp:
+    image: ghcr.io/groupdocs-search/search-net-mcp:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ./documents:/data           # documents to index; the index is kept in /data/.groupdocs-search-index
+      - ./license:/license:ro       # license file (read-only)
+      # Read-only documents? Keep the index in its own volume instead:
+      # - ./index:/index
+    environment:
+      GROUPDOCS_MCP_STORAGE_PATH: /data
+      GROUPDOCS_LICENSE_PATH: /license/GroupDocs.Total.lic
+      # Matches the optional volume above:
+      # GROUPDOCS_MCP_INDEX_PATH: /index
+    stdin_open: true
+    tty: true
+    restart: unless-stopped

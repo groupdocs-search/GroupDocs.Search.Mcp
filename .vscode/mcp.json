@@ -1,0 +1,34 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/client.schema.json",
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "storage_path",
+      "description": "Folder with the documents to index. The search index is kept in its .groupdocs-search-index sub-folder.",
+      "password": false
+    }
+  ],
+  "servers": {
+    "groupdocs-search": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "-v", "${input:storage_path}:/data", "ghcr.io/groupdocs-search/search-net-mcp:latest"]
+    },
+    "groupdocs-search-dev": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "src/GroupDocs.Search.Mcp",
+        "-c",
+        "Release",
+        "--no-launch-profile"
+      ],
+      "env": {
+        "GROUPDOCS_MCP_STORAGE_PATH": "${input:storage_path}",
+        "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+        "DOTNET_NOLOGO": "1"
+      }
+    }
+  }
+}
