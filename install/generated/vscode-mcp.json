@@ -1,0 +1,16 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "storage_path",
+      "description": "Base folder for input and output files.",
+      "password": false
+    }
+  ],
+  "servers": {
+    "groupdocs-search": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "-v", "${input:storage_path}:/data", "-e", "GROUPDOCS_MCP_STORAGE_PATH=/data", "-e", "GROUPDOCS_MCP_OUTPUT_PATH=/data", "-e", "GROUPDOCS_LICENSE_PATH=", "ghcr.io/groupdocs-search/search-net-mcp:latest"]
+    }
+  }
+}
