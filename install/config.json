@@ -1,0 +1,11 @@
+{
+  "$comment": "Canonical MCP install config - the SINGLE source all generated install snippets, deeplinks, and README install blocks derive from. Edit this file, then run install/generate-install-links.ps1 to regenerate install/generated/ and the README install-buttons block. CI fails if they drift. This product is DOCKER-FIRST: the packed tool exceeds NuGet.org's 250 MB limit, so there is no dnx/NuGet path - command is docker and the image lives on GHCR only. The release VERSION is read from build/dependencies.props (<GroupDocsSearchMcp>) at generation time.",
+  "name": "groupdocs-search",
+  "displayName": "GroupDocs Search",
+  "packageId": "GroupDocs.Search.Mcp",
+  "registryName": "io.github.groupdocs-search/groupdocs-search-mcp",
+  "ghcrImage": "ghcr.io/groupdocs-search/search-net-mcp",
+  "testsRepo": "groupdocs-search/GroupDocs.Search.Mcp.Tests",
+  "command": "docker",
+  "args": ["run", "--rm", "-i", "-v", "/path/to/documents:/data", "ghcr.io/groupdocs-search/search-net-mcp:latest"]
+}
