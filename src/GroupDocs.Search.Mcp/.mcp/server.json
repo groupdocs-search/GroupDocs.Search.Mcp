@@ -1,0 +1,87 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "description": "MCP server for GroupDocs.Search — index documents and run full-text search via AI agents.",
+  "name": "io.github.groupdocs-search/groupdocs-search-mcp",
+  "version": "26.10.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/groupdocs-search/search-net-mcp:26.10.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "GROUPDOCS_MCP_STORAGE_PATH",
+          "value": "{storage_path}",
+          "variables": {
+            "storage_path": {
+              "description": "Folder that holds the documents to index; tool paths are relative to it. In the container image this is /data.",
+              "isRequired": false,
+              "isSecret": false
+            }
+          }
+        },
+        {
+          "name": "GROUPDOCS_MCP_OUTPUT_PATH",
+          "value": "{output_path}",
+          "variables": {
+            "output_path": {
+              "description": "Optional - writable folder; when set and GROUPDOCS_MCP_INDEX_PATH is not, indexes are kept under it. Defaults to GROUPDOCS_MCP_STORAGE_PATH.",
+              "isRequired": false,
+              "isSecret": false
+            }
+          }
+        },
+        {
+          "name": "GROUPDOCS_MCP_INDEX_PATH",
+          "value": "{index_path}",
+          "variables": {
+            "index_path": {
+              "description": "Optional - folder that holds the search indexes. Defaults to '.groupdocs-search-index' inside the output (or storage) folder, which keeps indexes next to the documents and excludes them from indexing. Set it when the documents folder is read-only.",
+              "isRequired": false,
+              "isSecret": false
+            }
+          }
+        },
+        {
+          "name": "GROUPDOCS_LICENSE_PATH",
+          "value": "{license_path}",
+          "variables": {
+            "license_path": {
+              "description": "Path to a GroupDocs license file (GroupDocs.Search.lic or GroupDocs.Total.lic), as seen inside the container. Omit to run in evaluation mode (100 documents per index, 10 documents per search result). Ignored when metered keys are set.",
+              "isRequired": false,
+              "isSecret": false
+            }
+          }
+        },
+        {
+          "name": "GROUPDOCS_METERED_PUBLIC_KEY",
+          "value": "{metered_public_key}",
+          "variables": {
+            "metered_public_key": {
+              "description": "Metered (pay-per-use) public key. Requires GROUPDOCS_METERED_PRIVATE_KEY as well. Takes precedence over GROUPDOCS_LICENSE_PATH. Metered mode reports usage to GroupDocs servers, so it needs outbound connectivity.",
+              "isRequired": false,
+              "isSecret": false
+            }
+          }
+        },
+        {
+          "name": "GROUPDOCS_METERED_PRIVATE_KEY",
+          "value": "{metered_private_key}",
+          "variables": {
+            "metered_private_key": {
+              "description": "Metered (pay-per-use) private key. Treat as a secret: supply it via an environment variable or a secret store, never hardcoded in a committed MCP client config.",
+              "isRequired": false,
+              "isSecret": true
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "repository": {
+    "url": "https://github.com/groupdocs-search/GroupDocs.Search.Mcp",
+    "source": "github"
+  }
+}
