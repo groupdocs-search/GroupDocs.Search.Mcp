@@ -34,6 +34,7 @@ public static class AddToIndexTool
             lock (IndexStore.Gate(folder))
             {
                 string? conversion = null;
+                IndexStore.EnsureWritable(config, folder);
                 using var index = IndexStore.Exists(folder)
                     ? IndexStore.Open(config, folder, out conversion)
                     : IndexStore.Create(config, folder, overwrite: false);

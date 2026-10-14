@@ -2,11 +2,11 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "description": "MCP server for GroupDocs.Search — index documents and run full-text search via AI agents.",
   "name": "io.github.groupdocs-search/groupdocs-search-mcp",
-  "version": "26.10.0",
+  "version": "26.10.1",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/groupdocs-search/search-net-mcp:26.10.0",
+      "identifier": "ghcr.io/groupdocs-search/search-net-mcp:26.10.1",
       "transport": {
         "type": "stdio"
       },

@@ -37,8 +37,24 @@ docker run --rm -i \
 ```
 
 Images are multi-arch (`linux/amd64` + `linux/arm64`), tagged `latest` plus an immutable version tag
-per release (e.g. `:26.10.0`). To pin, replace `:latest` with the version tag — recommended for shared
+per release (e.g. `:26.10.1`). To pin, replace `:latest` with the version tag — recommended for shared
 configs and CI.
+
+### Linux: run the container as your user
+
+The image runs as a non-root user (uid 1654). On Linux a mounted folder keeps its host owner, so a folder
+you own is **read-only** inside the container and indexing fails with *"The index folder … is not
+writable"*. Add `--user` so the container writes as you:
+
+```bash
+docker run --rm -i --user "$(id -u):$(id -g)" \
+  -v $(pwd)/documents:/data \
+  ghcr.io/groupdocs-search/search-net-mcp:latest
+```
+
+MCP client configs (JSON) do not run a shell, so put the numbers in directly — `id -u` and `id -g`
+print them, typically `1000`: `"args": ["run", "--rm", "-i", "--user", "1000:1000", "-v", …]`. Docker
+Desktop on Windows and macOS does not need this.
 
 ### Where the index lives
 

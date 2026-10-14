@@ -40,6 +40,7 @@ public static class RemoveFromIndexTool
         {
             lock (IndexStore.Gate(folder))
             {
+                IndexStore.EnsureWritable(config, folder);
                 using var index = IndexStore.Open(config, folder, out _);
                 var before = index.GetIndexedDocuments().Length;
                 var targetTrimmed = Path.TrimEndingDirectorySeparator(target);

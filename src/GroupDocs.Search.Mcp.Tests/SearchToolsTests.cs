@@ -176,6 +176,24 @@ public sealed class SearchToolsTests : IDisposable
         Assert.Equal(2, info.GetProperty("documentCount").GetInt32());
     }
 
+    [Fact]
+    public void UnwritableIndexFolder_FailsWithTheFix()
+    {
+        // A file where a folder should be makes the index root impossible to create on every OS -
+        // the same failure Docker on Linux produces when /data is not writable by the container user.
+        var blocker = Path.Combine(_root, "not-a-folder");
+        File.WriteAllText(blocker, "x");
+        var cfg = new SearchConfig { StorageRoot = _cfg.StorageRoot, IndexRoot = Path.Combine(blocker, "idx") };
+
+        var r = AddToIndexTool.AddToIndex(_license, cfg, indexName: "t");
+
+        Assert.True(r.IsError);
+        Assert.StartsWith("Indexing failed for", Text(r));
+        Assert.Contains("is not writable by the server process", Text(r));
+        Assert.Contains("--user \"$(id -u):$(id -g)\"", Text(r));
+        Assert.Contains("GROUPDOCS_MCP_INDEX_PATH=/index", Text(r));
+    }
+
     [Theory]
     [InlineData("quarterly revenue", true)]
     [InlineData("\"quarterly revenue\"", false)]

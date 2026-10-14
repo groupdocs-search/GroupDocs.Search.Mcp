@@ -1,4 +1,4 @@
-# Generated install links - GroupDocs Search MCP (source: install/config.json, version 26.10.0)
+# Generated install links - GroupDocs Search MCP (source: install/config.json, version 26.10.1)
 
 Do not edit by hand; run `pwsh install/generate-install-links.ps1`.
 

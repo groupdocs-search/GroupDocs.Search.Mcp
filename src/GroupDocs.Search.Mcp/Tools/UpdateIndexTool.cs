@@ -31,6 +31,7 @@ public static class UpdateIndexTool
         {
             lock (IndexStore.Gate(folder))
             {
+                IndexStore.EnsureWritable(config, folder);
                 using var index = IndexStore.Open(config, folder, out var conversion);
                 var started = DateTime.Now.AddSeconds(-1);
                 index.Update(new UpdateOptions());

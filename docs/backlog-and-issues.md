@@ -4,7 +4,7 @@ Running list of ideas, planned work, and known limitations for the GroupDocs.Sea
 Grouped by topic. Terse on purpose — each line is a ticket, not an essay. `[ ]` = open,
 `[x]` = shipped (kept for context).
 
-**Current surface (26.10.0):** `create_index`, `add_to_index`, `update_index`, `remove_from_index`,
+**Current surface (26.10.1):** `create_index`, `add_to_index`, `update_index`, `remove_from_index`,
 `search`, `get_text_fragments`, `get_index_info`, plus Core's `get_license_status`.
 
 **Channel: Docker/GHCR only (OCI).** The packed tool is 280.9 MiB (measured 2026-10-14), over
@@ -44,7 +44,10 @@ NuGet.org's 250 MB limit, so there is no `dnx` path. Registry entry is registere
 
 ## Testing & CI
 
-- [ ] P1 Run the Tests repo's docker channel against the first published image (26.10.0).
+- [x] P1 Run the Tests repo's docker channel against the published image — first run (26.10.0) failed on Linux with
+      `Permission denied` on `/data/.groupdocs-search-index`; fixed in 26.10.1 (fixture runs `--user`, server explains the fix).
+- [ ] P2 Family-wide: every image runs as uid 1654, so on Linux any write to a bind-mounted folder the user owns fails
+      the same way (Parser's `extract_images` docker tests fail on it). Document `--user` in every product's Docker section.
 - [ ] P2 Linux container check of image indexing (PNG / image-bearing PDF) — `libgdiplus` path.
 - [ ] P2 Metered run: `get_license_status` → `metered`, then `search` with the eval cap lifted.
 

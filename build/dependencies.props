@@ -24,7 +24,7 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Package Versions">
-    <GroupDocsSearchMcp>26.10.0</GroupDocsSearchMcp>
+    <GroupDocsSearchMcp>26.10.1</GroupDocsSearchMcp>
   </PropertyGroup>
 
   <PropertyGroup Label="External Dependency Versions">

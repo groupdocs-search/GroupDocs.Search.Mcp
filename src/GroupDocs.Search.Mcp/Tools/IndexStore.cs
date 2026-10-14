@@ -47,9 +47,37 @@ internal static class IndexStore
     /// <summary>Creates a new index, or recreates it when <paramref name="overwrite"/> is set.</summary>
     public static Index Create(SearchConfig cfg, string folder, bool overwrite)
     {
-        Directory.CreateDirectory(folder);
+        EnsureWritable(cfg, folder);
         return new Index(folder, Settings(cfg), overwrite);
     }
+
+    /// <summary>
+    /// Proves the index folder can be written before the engine tries, and turns the failure into
+    /// the fix. The common case is Docker on Linux: the image runs as a non-root user, a bind mount
+    /// keeps its host owner, and a folder the user owns is read-only inside the container - so the
+    /// default index location, /data/.groupdocs-search-index, cannot be created.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The folder cannot be created or written.</exception>
+    public static void EnsureWritable(SearchConfig cfg, string folder)
+    {
+        try
+        {
+            Directory.CreateDirectory(folder);
+            var probe = Path.Combine(folder, $".write-probe-{Guid.NewGuid():N}");
+            File.WriteAllBytes(probe, []);
+            File.Delete(probe);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            throw new InvalidOperationException(NotWritableMessage(cfg), ex);
+        }
+    }
+
+    public static string NotWritableMessage(SearchConfig cfg) =>
+        $"The index folder '{cfg.IndexRoot}' is not writable by the server process. " +
+        "In Docker on Linux the container runs as a non-root user, so a host folder you own is read-only " +
+        "to it: add --user \"$(id -u):$(id -g)\" to docker run, or mount a writable folder at /index and " +
+        "set GROUPDOCS_MCP_INDEX_PATH=/index. Outside Docker, point GROUPDOCS_MCP_INDEX_PATH at a writable folder.";
 
     /// <summary>
     /// Opens an existing index. Indexes written by GroupDocs.Search 22.7–26.8 are converted to the
