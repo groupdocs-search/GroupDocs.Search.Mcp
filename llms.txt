@@ -1,0 +1,54 @@
+# GroupDocs.Search MCP Server
+
+MCP server for GroupDocs.Search — index documents and run full-text search via AI agents. Wraps GroupDocs.Search for .NET and exposes local document indexing and search as tool calls for Claude, Cursor, VS Code / GitHub Copilot, and other MCP-compatible clients. Indexes PDF, DOCX, XLSX, PPTX, ODT, RTF, TXT, HTML, EPUB, EML, MSG, PST, ZIP and 70+ more formats, locally — documents never leave the machine. Exposes create_index, add_to_index, update_index, remove_from_index, search, get_text_fragments, get_index_info, and get_license_status tools.
+
+## Install
+
+Docker-first product - the packed tool (~281 MiB) exceeds NuGet.org's 250 MB limit, so there is no dnx / NuGet path. Multi-arch image (amd64 + arm64) on GHCR; pin by replacing :latest with a version tag.
+
+- As a Docker container: `docker run --rm -i -v $(pwd)/documents:/data ghcr.io/groupdocs-search/search-net-mcp:latest`
+- The index is kept in /data/.groupdocs-search-index, so it persists with the one mount. For a read-only documents mount add `-v /path/to/index:/index -e GROUPDOCS_MCP_INDEX_PATH=/index`.
+
+## MCP tools
+
+- add_to_index — index a file, a folder (recursively) or the whole storage folder; creates the index on demand. Paths are relative to the storage folder.
+- search — documents matching a query, ranked by relevance, as JSON (documentsFound, documents with filePath, occurrences, terms; hint when an unquoted phrase matched nothing).
+- get_text_fragments — the matching passages with surrounding words, as plain text.
+- update_index — re-read changed files, add new files under indexed folders, drop deleted ones.
+- remove_from_index — remove an indexed path (a folder or file passed to add_to_index); files on disk untouched.
+- create_index — create or open a named index such as 'contracts'; recreate=true empties it.
+- get_index_info — whether an index exists, document count, indexed paths, version, other indexes; optionally the supported formats. Safe with no arguments.
+- get_license_status — active licensing mode (evaluation / licensed / metered), engine version, and metered consumption. Takes no arguments and processes no document.
+
+## Query syntax
+
+Single words; phrases in double quotes ("force majeure" — unquoted multi-word input does not match); AND, OR, NOT and parentheses; ? character wildcards (?ffect, princip?(2~4)); daterange(2026-01-01 ~~ 2026-06-30); number ranges (100 ~~ 500); field prefixes (filename: lease); regular expressions starting with ^; fuzzy matching via the fuzzy argument.
+
+## Environment variables
+
+- GROUPDOCS_MCP_STORAGE_PATH — folder with the documents to index; tool paths are relative to it (/data in the image)
+- GROUPDOCS_MCP_OUTPUT_PATH — optional writable folder; indexes go under it when GROUPDOCS_MCP_INDEX_PATH is not set
+- GROUPDOCS_MCP_INDEX_PATH — optional folder for the indexes (default: .groupdocs-search-index inside the output or storage folder)
+- GROUPDOCS_LICENSE_PATH — path to a GroupDocs license file inside the container (GroupDocs.Search.lic or GroupDocs.Total.lic); omit for evaluation mode; ignored when metered keys are set
+- GROUPDOCS_METERED_PUBLIC_KEY — metered (pay-per-use) public key; needs the private key too and takes precedence over GROUPDOCS_LICENSE_PATH
+- GROUPDOCS_METERED_PRIVATE_KEY — metered private key; secret, pass from the environment rather than a committed config
+
+## Licensing
+
+The MCP server is MIT; the underlying GroupDocs.Search engine requires a license for production use. Evaluation mode (no license) limits are counts, not watermarks: an index holds at most 100 documents and a search returns at most 10 documents; every response carries an evaluation note while this applies — see https://docs.groupdocs.com/search/net/evaluation-limitations-and-licensing/. Two ways to license: a license file (mount it into the container and set GROUPDOCS_LICENSE_PATH) or metered pay-per-use (set GROUPDOCS_METERED_PUBLIC_KEY and GROUPDOCS_METERED_PRIVATE_KEY; metered wins over a license file and needs outbound connectivity because usage is reported to GroupDocs servers). Call get_license_status to see the active mode and metered consumption. Free 30-day temporary license: https://purchase.groupdocs.com/temporary-license/ - purchase: https://purchase.groupdocs.com/pricing/search/net
+
+## Key links
+
+- GHCR package: https://github.com/orgs/groupdocs-search/packages/container/package/search-net-mcp
+- Repository: https://github.com/groupdocs-search/GroupDocs.Search.Mcp
+- Tests and how-to guides: https://github.com/groupdocs-search/GroupDocs.Search.Mcp.Tests
+- Docker: ghcr.io/groupdocs-search/search-net-mcp
+- License: MIT
+
+## Example prompts for AI agents
+
+- "Index everything in my contracts folder."
+- "Which contracts mention a termination penalty?"
+- "Show me the paragraphs that talk about \"force majeure\", with the file each one comes from."
+- "I edited some files in reports — refresh the index and search for the Q3 forecast again."
+- "Create an index called hr for the HR folder, then search it for parental leave."
