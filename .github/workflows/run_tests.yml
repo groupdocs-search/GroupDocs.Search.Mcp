@@ -1,0 +1,141 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'src/**'
+      - '**/*.csproj'
+      - 'src/Directory.Build.props'
+      - 'build/**'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'src/**'
+      - '**/*.csproj'
+      - 'src/Directory.Build.props'
+      - 'build/**'
+  workflow_dispatch:
+
+jobs:
+  validate-mcp-manifest:
+    name: Validate .mcp/server.json schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install check-jsonschema
+        run: pipx install check-jsonschema
+
+      - name: Resolve MCP schema URL
+        id: schema
+        run: |
+          SCHEMA_URL=$(jq -r '."$schema"' src/GroupDocs.Search.Mcp/.mcp/server.json)
+          echo "url=$SCHEMA_URL" >> "$GITHUB_OUTPUT"
+          echo "Using schema: $SCHEMA_URL"
+
+      - name: Validate server.json
+        run: |
+          check-jsonschema \
+            --schemafile "${{ steps.schema.outputs.url }}" \
+            src/GroupDocs.Search.Mcp/.mcp/server.json
+
+      - name: Confirm server.json version matches dependencies.props
+        shell: pwsh
+        run: |
+          [xml]$deps = Get-Content build/dependencies.props
+          $expected = $deps.SelectSingleNode('//GroupDocsSearchMcp').InnerText.Trim()
+          $server = Get-Content src/GroupDocs.Search.Mcp/.mcp/server.json -Raw | ConvertFrom-Json
+          # Where the package version lives depends on the package type: a NuGet package
+          # carries a "version" field, an OCI package carries it in the image tag and has no
+          # "version" field at all. Counting "version" fields fails every docker-first release.
+          $problems = @()
+          if ($server.version -ne $expected) { $problems += "top-level version is '$($server.version)'" }
+          foreach ($pkg in @($server.packages)) {
+            if ($pkg.registryType -eq 'oci') {
+              if (-not "$($pkg.identifier)".EndsWith(":$expected")) { $problems += "OCI image tag is '$($pkg.identifier)'" }
+            } elseif ($pkg.version -ne $expected) {
+              $problems += "$($pkg.registryType) package version is '$($pkg.version)'"
+            }
+          }
+          if (@($server.packages).Count -eq 0) { $problems += 'no packages declared' }
+          if ($problems.Count -gt 0) {
+            Write-Error "server.json version drift vs dependencies.props '$expected': $($problems -join '; ')."
+            exit 1
+          }
+          Write-Host "server.json version '$expected' matches dependencies.props (top-level + $(@($server.packages).Count) package(s))"
+
+  test:
+    name: Test on .NET ${{ matrix.dotnet-version }}
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        dotnet-version:
+          - '10.0.x'
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_NOLOGO: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ matrix.dotnet-version }}
+
+      - name: Restore dependencies
+        run: dotnet restore ./src/GroupDocs.Search.Mcp.sln
+
+      - name: Build solution
+        run: dotnet build ./src/GroupDocs.Search.Mcp.sln --no-restore --configuration Release
+
+      - name: Run tests
+        run: >
+          dotnet test
+          ./src/GroupDocs.Search.Mcp.Tests/GroupDocs.Search.Mcp.Tests.csproj
+          --no-build
+          --configuration Release
+          --verbosity normal
+          --logger "trx;LogFileName=test-results-${{ matrix.dotnet-version }}.trx"
+          --collect:"XPlat Code Coverage"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.dotnet-version }}
+          path: |
+            **/test-results-*.trx
+            **/coverage.cobertura.xml
+          retention-days: 30
+
+  publish-test-results:
+    name: "Publish Tests Results"
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+      issues: read
+    if: always()
+
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: test-results-*
+          merge-multiple: true
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: "artifacts/**/*.trx"
+          check_name: "Test Results"
+          comment_mode: always
+          report_individual_runs: true
+          fail_on: "test failures"
