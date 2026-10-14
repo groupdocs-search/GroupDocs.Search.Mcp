@@ -1,0 +1,377 @@
+name: Publish Prod
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (must match build/dependencies.props, e.g. 26.4.0)'
+        required: true
+        type: string
+
+jobs:
+  publish_prod:
+    # Accept either:
+    #   - tag push (github.ref starts with refs/tags/), or
+    #   - workflow_dispatch with a version input supplied.
+    # Branch dispatches without a version input are skipped so we never create a bogus tag/release.
+    if: startsWith(github.ref, 'refs/tags/') || inputs.version != ''
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      # 'true' when the built nupkg exceeds NuGet.org's 250 MB limit — the NuGet
+      # push + signing are skipped and this release ships via Docker/GHCR + the
+      # MCP Registry (OCI). Consumed by the publish_mcp_registry job.
+      oversize: ${{ steps.size.outputs.oversize }}
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      # Pinned via GitHub repo variable; fallback to 1.3.0 if unset
+      CODE_SIGN_TOOL_VERSION: ${{ vars.CODE_SIGN_TOOL_VERSION || '1.3.0' }}
+    permissions:
+      contents: write         # required to create GitHub Release
+    steps:
+      # DOCKER-FIRST WORKAROUND — the CodeSign + NuGet-push secrets below are only used
+      # by the size-gated steps that are SKIPPED for oversize releases (see the size-check
+      # step and its `if: steps.size.outputs.oversize != 'true'` guards). GroupDocs.Search
+      # always packs oversize (~281 MiB: a 200 MiB engine DLL plus ONNX/Skia natives), so these secrets are never consumed
+      # here. The pre-flight therefore only WARNS about missing ones instead of hard-failing.
+      # REVERT TO NUGET: when the packed size drops under 250 MB and the size-gate is
+      # removed, restore this to a hard failure (`Write-Error` + `exit 1`).
+      - name: Verify optional signing/NuGet secrets
+        shell: pwsh
+        env:
+          CODE_SIGN_CLIENT_ID: ${{ secrets.CODE_SIGN_CLIENT_ID }}
+          ES_USERNAME:         ${{ secrets.ES_USERNAME }}
+          ES_PASSWORD:         ${{ secrets.ES_PASSWORD }}
+          ES_TOTP_SECRET:      ${{ secrets.ES_TOTP_SECRET }}
+          NUGET_API_KEY_PROD:  ${{ secrets.NUGET_API_KEY_PROD }}
+        run: |
+          $optional = @(
+            'CODE_SIGN_CLIENT_ID',
+            'ES_USERNAME',
+            'ES_PASSWORD',
+            'ES_TOTP_SECRET',
+            'NUGET_API_KEY_PROD'
+          )
+          $missing = @()
+          foreach ($name in $optional) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              $missing += $name
+            }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Warning "Signing/NuGet secrets not set: $($missing -join ', '). These are only used for the NuGet-sized publish path, which is skipped for oversize (Docker-first) releases — continuing."
+          } else {
+            Write-Host "All signing/NuGet secrets present."
+          }
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve and validate version
+        id: ver
+        shell: pwsh
+        run: |
+          # Derive the effective release version.
+          # Priority: tag push (github.ref_name) → workflow_dispatch input (inputs.version).
+          $version = if ('${{ github.ref_type }}' -eq 'tag') {
+            '${{ github.ref_name }}'
+          } else {
+            '${{ inputs.version }}'
+          }
+
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            Write-Error "Version '$version' does not match YY.MM.N (e.g. 26.4.0)."
+            exit 1
+          }
+
+          # Confirm dependencies.props agrees with the requested version.
+          [xml]$deps = Get-Content build/dependencies.props
+          $node = $deps.SelectSingleNode('//GroupDocsSearchMcp')
+          if ($null -eq $node) {
+            Write-Error "<GroupDocsSearchMcp> not found in build/dependencies.props."
+            exit 1
+          }
+          $actual = $node.InnerText.Trim()
+          if ($actual -ne $version) {
+            Write-Error "build/dependencies.props has <GroupDocsSearchMcp>$actual</...>, but release version is '$version'. Bump the props file, commit, and try again."
+            exit 1
+          }
+
+          # Confirm .mcp/server.json matches too (build.ps1 has its own check, but fail fast here before rest of pipeline).
+          # DOCKER-FIRST: the OCI package carries its version ONLY in the identifier tag
+          # (ghcr.io/...:x.y.z) — the MCP Registry rejects an OCI package that also has a
+          # 'version' field. So server.json has exactly ONE 'version' (top-level) plus the
+          # tag on the identifier; both must match the release version.
+          # REVERT TO NUGET: when the nuget package block returns (with its own 'version'),
+          # restore the two-field check ($count -ne 2) and drop the identifier-tag check.
+          $serverJson = Get-Content src/GroupDocs.Search.Mcp/.mcp/server.json -Raw
+          $pattern = '"version"\s*:\s*"' + [regex]::Escape($version) + '"'
+          $count = [regex]::Matches($serverJson, $pattern).Count
+          if ($count -ne 1) {
+            Write-Error "server.json version drift: expected exactly one 'version' field = '$version' (found $count). Update src/GroupDocs.Search.Mcp/.mcp/server.json and try again."
+            exit 1
+          }
+          $tagPattern = '"identifier"\s*:\s*"ghcr\.io/[^"]+:' + [regex]::Escape($version) + '"'
+          if ([regex]::Matches($serverJson, $tagPattern).Count -ne 1) {
+            Write-Error "server.json OCI identifier does not carry the ':$version' tag. Update src/GroupDocs.Search.Mcp/.mcp/server.json and try again."
+            exit 1
+          }
+
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Releasing version: $version"
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build packages
+        env:
+          BUILD_TYPE: PROD
+        run: .\build.ps1
+
+      # ───────────────────────────────────────────────────────────────────────────
+      # DOCKER-FIRST WORKAROUND — REVERT TO NUGET WHEN THE ENGINE FITS UNDER 250 MB
+      #
+      # GroupDocs.Search's managed DLL is ~200 MiB and it ships ONNX Runtime natives, so the packed
+      # nupkg (~320 MB) exceeds NuGet.org's 250 MB hard limit. Until upstream ships a
+      # model-externalized / "lite" engine that packs under 250 MB, this product is
+      # released via Docker/GHCR + the MCP Registry (OCI) instead of NuGet.
+      #
+      # TO REVERT to the standard NuGet flow (identical to the other GroupDocs MCP products):
+      #   1. Remove this size-check step, the `oversize` job output (top of publish_prod),
+      #      and every `if: steps.size.outputs.oversize != 'true'` guard on the CodeSign +
+      #      NuGet-push steps below.
+      #   2. In the `publish_mcp_registry` job, drop the oversize/GHCR branch of the
+      #      "Wait for the release artifact" step — keep only the NuGet-index wait.
+      #   3. src/GroupDocs.Search.Mcp/.mcp/server.json → packages[0]: change back to
+      #        "registryType": "nuget",
+      #        "registryBaseUrl": "https://api.nuget.org/v3/index.json",
+      #        "identifier": "GroupDocs.Search.Mcp"
+      #      (JSON can't carry comments, so this note is the source of truth for that file.)
+      #   4. docker/Dockerfile: the io.modelcontextprotocol.server.name LABEL may stay
+      #      (harmless) or be removed.
+      #   5. Re-enable the NuGet/dnx integration suite in GroupDocs.Search.Mcp.Tests
+      #      (see its .github/workflows/integration.yml — currently skipped).
+      # ───────────────────────────────────────────────────────────────────────────
+      - name: Check nupkg size vs NuGet limit
+        id: size
+        shell: pwsh
+        run: |
+          # NuGet.org rejects packages over 250 MB (HTTP 413). GroupDocs.Search's managed
+          # DLL is ~200 MiB plus ONNX Runtime natives, so its nupkg (~281 MiB) exceeds the limit.
+          # Detect that and skip the NuGet push — the release still ships via Docker/GHCR
+          # + the MCP Registry (OCI). All other channels are unaffected.
+          $limitBytes = 250MB
+          $nupkg = Get-ChildItem "$env:GITHUB_WORKSPACE\build_out" -Filter *.nupkg |
+                   Sort-Object Length -Descending | Select-Object -First 1
+          if (-not $nupkg) { Write-Error "Build produced no .nupkg in build_out."; exit 1 }
+          $sizeMB = [math]::Round($nupkg.Length / 1MB, 1)
+          if ($nupkg.Length -gt $limitBytes) {
+            Write-Host "::warning::$($nupkg.Name) is $sizeMB MB (> NuGet's 250 MB limit). Skipping NuGet push + signing; releasing via Docker/GHCR + MCP Registry (OCI)."
+            "oversize=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          } else {
+            Write-Host "$($nupkg.Name) is $sizeMB MB (<= 250 MB) — normal NuGet release."
+            "oversize=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
+
+      - name: Download CodeSignTool
+        if: steps.size.outputs.oversize != 'true'
+        run: |
+          $version = $env:CODE_SIGN_TOOL_VERSION
+          Invoke-WebRequest -Uri "https://github.com/SSLcom/CodeSignTool/releases/download/v$version/CodeSignTool-v$version-windows.zip" -OutFile codesign.zip
+
+      - name: Unpack CodeSignTool
+        if: steps.size.outputs.oversize != 'true'
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\code_sign" | Out-Null
+          Expand-Archive -Path codesign.zip -DestinationPath "$env:GITHUB_WORKSPACE\code_sign" -Force
+
+      - name: Configure CodeSignTool
+        if: steps.size.outputs.oversize != 'true'
+        env:
+          CODE_SIGN_CLIENT_ID: ${{ secrets.CODE_SIGN_CLIENT_ID }}
+        run: |
+          $confPath = "$env:GITHUB_WORKSPACE\code_sign\conf\code_sign_tool.properties"
+          if (Test-Path $confPath) { Remove-Item $confPath -Force }
+          $lines = @(
+            "CLIENT_ID=$env:CODE_SIGN_CLIENT_ID"
+            'OAUTH2_ENDPOINT=https://login.ssl.com/oauth2/token'
+            'CSC_API_ENDPOINT=https://cs.ssl.com'
+            'TSA_URL=http://ts.ssl.com'
+            'TSA_LEGACY_URL=http://ts.ssl.com/legacy'
+          )
+          Set-Content -Path $confPath -Value $lines
+
+      - name: Prepare artifacts directory
+        if: steps.size.outputs.oversize != 'true'
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\artifacts" | Out-Null
+          Move-Item "$env:GITHUB_WORKSPACE\build_out\*" "$env:GITHUB_WORKSPACE\artifacts" -Exclude *.nupkg -Force
+
+      - name: Sign packages with SSL.com eSigner
+        if: steps.size.outputs.oversize != 'true'
+        # Per-file signing with a 3-minute delay before each call. SSL.com eSigner
+        # throttles rapid successive TOTP-authenticated sign operations; batching or
+        # back-to-back signs intermittently fail, so we space them out deterministically.
+        working-directory: ${{ github.workspace }}\code_sign
+        run: |
+          $version = $env:CODE_SIGN_TOOL_VERSION
+          $files = @(Get-ChildItem "$env:GITHUB_WORKSPACE\build_out" -Filter *.nupkg)
+          if ($files.Count -eq 0) {
+            Write-Error "No .nupkg files found in build_out to sign."
+            exit 1
+          }
+          foreach ($file in $files) {
+            Write-Host "Waiting 3 minutes before signing $($file.Name) (SSL.com throttling workaround)..."
+            Start-Sleep -Seconds 180
+            Write-Host "Signing $($file.Name)..."
+            & ".\jdk-11.0.2\bin\java" -Xmx1024M -jar ".\jar\code_sign_tool-$version.jar" sign `
+              -username="${{ secrets.ES_USERNAME }}" `
+              -password="${{ secrets.ES_PASSWORD }}" `
+              -totp_secret="${{ secrets.ES_TOTP_SECRET }}" `
+              -input_file_path="$($file.FullName)" `
+              -output_dir_path="$env:GITHUB_WORKSPACE/artifacts"
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "CodeSignTool failed signing $($file.Name) (exit $LASTEXITCODE)."
+              exit $LASTEXITCODE
+            }
+          }
+
+      - name: Verify all packages were signed
+        if: steps.size.outputs.oversize != 'true'
+        shell: pwsh
+        run: |
+          $expected = @(Get-ChildItem "$env:GITHUB_WORKSPACE\build_out" -Filter *.nupkg)
+          $signed   = @(Get-ChildItem "$env:GITHUB_WORKSPACE\artifacts" -Filter *.nupkg)
+          if ($expected.Count -eq 0) {
+            Write-Error "No input .nupkg files found in build_out - build step produced nothing to sign."
+            exit 1
+          }
+          if ($signed.Count -ne $expected.Count) {
+            $expectedNames = ($expected | ForEach-Object { $_.Name }) -join ', '
+            $signedNames   = if ($signed.Count -gt 0) { ($signed | ForEach-Object { $_.Name }) -join ', ' } else { '<none>' }
+            Write-Error "Signing produced $($signed.Count) of $($expected.Count) expected .nupkg files. Expected: $expectedNames. Found signed: $signedNames. CodeSignTool likely failed silently - check the previous step's output."
+            exit 1
+          }
+          Write-Host "Signing verified: $($signed.Count) of $($expected.Count) packages present in artifacts."
+
+      - name: Publish to Prod (NuGet push)
+        if: steps.size.outputs.oversize != 'true'
+        env:
+          NUGET_API_KEY_PROD: ${{ secrets.NUGET_API_KEY_PROD }}
+        run: .\publish-prod.ps1
+
+      - name: Archive packages
+        if: steps.size.outputs.oversize != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts
+          path: artifacts
+
+      - name: Extract changelog entry for this release
+        id: changelog
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.ver.outputs.version }}"
+          $entry = Get-ChildItem -Path "changelog" -Filter "*.md" |
+            Where-Object { $_.Name -ne "README.md" } |
+            Where-Object { (Get-Content $_.FullName -Raw) -match "version:\s*$([regex]::Escape($tag))\s*$" -or `
+                            (Get-Content $_.FullName -Raw) -match "version:\s*$([regex]::Escape($tag))`r?`n" } |
+            Select-Object -First 1
+          if ($entry) {
+            $body = Get-Content $entry.FullName -Raw
+            # Strip YAML frontmatter
+            $body = [regex]::Replace($body, '(?s)\A---.*?---\s*', '')
+            $bodyFile = "$env:GITHUB_WORKSPACE\release_body.md"
+            Set-Content -Path $bodyFile -Value $body
+            echo "body_path=$bodyFile" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "No changelog entry found for version $tag"
+            echo "body_path=" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Create GitHub Release
+        # Creates the tag on workflow_dispatch runs (tag doesn't yet exist).
+        # On tag-push runs the tag already exists and this just attaches the release to it.
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          name: ${{ steps.ver.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          body_path: ${{ steps.changelog.outputs.body_path }}
+          files: artifacts/*.nupkg
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+
+  publish_mcp_registry:
+    name: Publish to MCP Registry
+    runs-on: ubuntu-latest
+    needs: publish_prod
+    # Runs on every release — tag push OR valid version input. Namespace verification via GitHub OIDC
+    # is automatic since the repo lives under github.com/groupdocs-search/*.
+    if: startsWith(github.ref, 'refs/tags/') || inputs.version != ''
+    permissions:
+      id-token: write     # for GitHub OIDC authentication
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download mcp-publisher
+        run: |
+          curl -fsSL \
+            -o mcp-publisher.tar.gz \
+            https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz
+          tar -xzf mcp-publisher.tar.gz
+          chmod +x mcp-publisher
+
+      - name: Wait for the release artifact to be available
+        # The MCP Registry verifies ownership by fetching the artifact referenced in
+        # server.json. Oversize releases reference the GHCR (OCI) image; normal releases
+        # reference the NuGet package. Poll the right source. Must run BEFORE the OIDC
+        # login — the registry JWT from `mcp-publisher login` is short-lived (~5 min) and
+        # would expire during a long wait.
+        env:
+          OVERSIZE: ${{ needs.publish_prod.outputs.oversize }}
+        run: |
+          VERSION=$(jq -r '.version' src/GroupDocs.Search.Mcp/.mcp/server.json)
+          if [ "$OVERSIZE" = "true" ]; then
+            IMAGE="groupdocs-search/search-net-mcp"
+            echo "Oversize release — waiting for GHCR image ghcr.io/$IMAGE:$VERSION (pushed by publish_docker.yml)..."
+            for attempt in $(seq 1 20); do
+              TOKEN=$(curl -fsSL "https://ghcr.io/token?scope=repository:$IMAGE:pull" | jq -r .token)
+              CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                       -H "Authorization: Bearer $TOKEN" \
+                       -H "Accept: application/vnd.oci.image.index.v1+json" \
+                       -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+                       -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+                       "https://ghcr.io/v2/$IMAGE/manifests/$VERSION")
+              if [ "$CODE" = "200" ]; then echo "GHCR image present after ~$((attempt * 30))s."; exit 0; fi
+              echo "Attempt $attempt/20: image not on GHCR yet (HTTP $CODE), sleeping 30s..."
+              sleep 30
+            done
+            echo "::error::GHCR image ghcr.io/$IMAGE:$VERSION not available within ~10 min. Ensure the Publish Docker Image workflow succeeded for this tag, then re-run this job."
+            exit 1
+          else
+            echo "Waiting for NuGet.org V3 index to list GroupDocs.Search.Mcp $VERSION..."
+            for attempt in $(seq 1 20); do
+              if curl -fsSL "https://api.nuget.org/v3-flatcontainer/groupdocs.search.mcp/index.json" 2>/dev/null \
+                   | jq -e --arg v "$VERSION" '.versions | index($v)' > /dev/null 2>&1; then
+                echo "Indexed after $attempt attempt(s) (~$((attempt * 60))s)."
+                exit 0
+              fi
+              echo "Attempt $attempt/20: not indexed yet, sleeping 60s..."
+              sleep 60
+            done
+            echo "::error::NuGet.org did not index $VERSION within 20 minutes. Re-run once https://www.nuget.org/packages/GroupDocs.Search.Mcp/$VERSION returns HTTP 200 — dotnet nuget push --skip-duplicate is idempotent."
+            exit 1
+          fi
+
+      - name: Authenticate with GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish server.json
+        run: ./mcp-publisher publish src/GroupDocs.Search.Mcp/.mcp/server.json

@@ -1,0 +1,18 @@
+# Smithery registry manifest - https://smithery.ai
+# Publishing is a manual step (see the improvement plan, task M8). DOCKER-FIRST product:
+# there is no dnx/NuGet path (packed tool exceeds NuGet.org's 250 MB limit).
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required: [storagePath]
+    properties:
+      storagePath:
+        type: string
+        title: Storage path
+        description: Folder with the documents to index (mounted into the container at /data). The search index is kept in a .groupdocs-search-index sub-folder.
+  commandFunction: |-
+    (config) => ({
+      command: "docker",
+      args: ["run", "--rm", "-i", "-v", config.storagePath + ":/data", "ghcr.io/groupdocs-search/search-net-mcp:latest"]
+    })
