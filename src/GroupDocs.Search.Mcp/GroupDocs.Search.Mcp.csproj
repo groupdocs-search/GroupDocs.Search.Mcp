@@ -1,0 +1,106 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>GroupDocs.Search.Mcp</PackageId>
+    <Version>$(GroupDocsSearchMcp)</Version>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>MCP server exposing GroupDocs.Search for .NET — index folders of PDF, Office, email, archive and 70+ document formats and run full-text, boolean, phrase, wildcard and fuzzy search over them via AI agents, locally.</Description>
+    <PackageTags>groupdocs;search;full-text-search;search-index;document-search;mcp;model-context-protocol;mcp-server;dotnet-tool;ai</PackageTags>
+    <PackageIcon>images\icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <PackageType>McpServer</PackageType>
+    <ToolCommandName>groupdocs-search-mcp</ToolCommandName>
+  </PropertyGroup>
+
+  <Target Name="StripNativeRuntimePdbs" AfterTargets="Publish">
+    <ItemGroup>
+      <_NativeRuntimePdbs Include="$(PublishDir)runtimes/**/*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(_NativeRuntimePdbs)" />
+    <Message
+      Text="StripNativeRuntimePdbs: removed @(_NativeRuntimePdbs->Count()) native PDB file(s) from publish output to keep the nupkg under NuGet.org's 250 MB limit."
+      Importance="high"
+      Condition="@(_NativeRuntimePdbs->Count()) > 0" />
+  </Target>
+
+  <!-- GroupDocs.Search pulls in ONNX Runtime + SkiaSharp + System.Drawing.Common
+       native assets for every platform their nuget packages target — including
+       mobile (iOS / Android) and exotic Linux architectures (loongarch64,
+       riscv64, mips64, ppc64le, s390x, armel) that are NOT realistic MCP-server
+       targets. An MCP server is invoked via `dnx` on Windows/Linux/macOS or via
+       Docker (linux-x64 / linux-arm64 / linux-musl-x64). Mobile and exotic
+       runtimes inflate the nupkg from ~250 MB to ~417 MB without serving any
+       MCP user.
+
+       This target strips them from the publish output BEFORE pack collects it,
+       bringing the nupkg back under NuGet.org's 250 MB hard limit. Keeps:
+       win-x64, win-x86, win-arm64, linux-x64, linux-arm64, linux-musl-x64,
+       linux-musl-arm64, osx-x64, osx-arm64. -->
+  <Target Name="StripMobileAndExoticRuntimes" AfterTargets="Publish">
+    <ItemGroup>
+      <_DropRuntimes Include="$(PublishDir)runtimes/ios/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/android/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/maccatalyst/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/tvos/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/browser-wasm/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/linux-loongarch64/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/linux-musl-loongarch64/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/linux-riscv64/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/linux-musl-riscv64/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/linux-mips64/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/linux-ppc64le/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/linux-s390x/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/linux-armel/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/linux-arm/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/linux-musl-arm/**/*" />
+      <_DropRuntimes Include="$(PublishDir)runtimes/osx/**/*" />  <!-- legacy fat dylib; replaced by osx-x64 + osx-arm64 -->
+    </ItemGroup>
+    <Delete Files="@(_DropRuntimes)" />
+    <RemoveDir Directories="$(PublishDir)runtimes/ios;$(PublishDir)runtimes/android;$(PublishDir)runtimes/maccatalyst;$(PublishDir)runtimes/tvos;$(PublishDir)runtimes/browser-wasm;$(PublishDir)runtimes/linux-loongarch64;$(PublishDir)runtimes/linux-musl-loongarch64;$(PublishDir)runtimes/linux-riscv64;$(PublishDir)runtimes/linux-musl-riscv64;$(PublishDir)runtimes/linux-mips64;$(PublishDir)runtimes/linux-ppc64le;$(PublishDir)runtimes/linux-s390x;$(PublishDir)runtimes/linux-armel;$(PublishDir)runtimes/linux-arm;$(PublishDir)runtimes/linux-musl-arm;$(PublishDir)runtimes/osx"
+               ContinueOnError="true" />
+    <Message
+      Text="StripMobileAndExoticRuntimes: removed @(_DropRuntimes->Count()) native asset(s) from publish output (iOS, Android, maccatalyst, tvOS, browser-wasm, linux-loongarch64/riscv64/mips64/ppc64le/s390x/armel, and legacy osx fat dylib) to keep the nupkg under NuGet.org's 250 MB limit."
+      Importance="high"
+      Condition="@(_DropRuntimes->Count()) > 0" />
+  </Target>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="GroupDocs.Search.Mcp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\assets\icon.png" Pack="true" Visible="false" PackagePath="images\icon.png" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="/" />
+    <None Include=".mcp\server.json" Pack="true" PackagePath=".mcp/server.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="GroupDocs.Mcp.Core" Version="$(GroupDocsMcpCore)" />
+    <PackageReference Include="GroupDocs.Mcp.Local.Storage" Version="$(GroupDocsMcpCore)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="GroupDocs.Search" Version="$(GroupDocsSearch)" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="$(MicrosoftExtensionsHosting)" />
+    <PackageReference Include="ModelContextProtocol" Version="$(ModelContextProtocol)" />
+  </ItemGroup>
+
+  <!-- GroupDocs.Search 26.10.0 is a single netstandard2.1 package. It declares SkiaSharp +
+       SkiaSharp.NativeAssets.Linux.NoDependencies (3.119.1), System.Drawing.Common 6.0.0 and
+       Microsoft.ML.OnnxRuntime 1.22.1 transitively, so libSkiaSharp.so and the ONNX natives ship
+       without our help. The StripMobileAndExoticRuntimes target above trims the mobile/exotic
+       native assets those bring. -->
+
+  <!-- Image indexing and reverse image search go through System.Drawing on some paths. This
+       switch is a no-op on System.Drawing.Common 7+, kept as the family's marker; the Docker
+       image installs libgdiplus + libfontconfig1 for the paths that still P/Invoke GDI+. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.Drawing.EnableUnixSupport" Value="true" />
+  </ItemGroup>
+
+</Project>
