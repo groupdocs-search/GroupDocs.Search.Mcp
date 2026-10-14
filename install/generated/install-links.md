@@ -1,0 +1,15 @@
+# Generated install links - GroupDocs Search MCP (source: install/config.json, version 26.10.0)
+
+Do not edit by hand; run `pwsh install/generate-install-links.ps1`.
+
+## One-click
+
+- VS Code: https://vscode.dev/redirect/mcp/install?name=groupdocs-search&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22--rm%22%2C%22-i%22%2C%22-v%22%2C%22%2Fpath%2Fto%2Fdocuments%3A%2Fdata%22%2C%22-e%22%2C%22GROUPDOCS_MCP_STORAGE_PATH%3D%2Fdata%22%2C%22-e%22%2C%22GROUPDOCS_MCP_OUTPUT_PATH%3D%2Fdata%22%2C%22-e%22%2C%22GROUPDOCS_LICENSE_PATH%3D%22%2C%22ghcr.io%2Fgroupdocs-search%2Fsearch-net-mcp%3Alatest%22%5D%7D
+- VS Code Insiders: https://insiders.vscode.dev/redirect/mcp/install?name=groupdocs-search&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22--rm%22%2C%22-i%22%2C%22-v%22%2C%22%2Fpath%2Fto%2Fdocuments%3A%2Fdata%22%2C%22-e%22%2C%22GROUPDOCS_MCP_STORAGE_PATH%3D%2Fdata%22%2C%22-e%22%2C%22GROUPDOCS_MCP_OUTPUT_PATH%3D%2Fdata%22%2C%22-e%22%2C%22GROUPDOCS_LICENSE_PATH%3D%22%2C%22ghcr.io%2Fgroupdocs-search%2Fsearch-net-mcp%3Alatest%22%5D%7D&quality=insiders
+- Cursor (TODO(verify): re-check deeplink format against current Cursor docs before relying on it): https://cursor.com/en/install-mcp?name=groupdocs-search&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItLXJtIiwiLWkiLCItdiIsIi9wYXRoL3RvL2RvY3VtZW50czovZGF0YSIsIi1lIiwiR1JPVVBET0NTX01DUF9TVE9SQUdFX1BBVEg9L2RhdGEiLCItZSIsIkdST1VQRE9DU19NQ1BfT1VUUFVUX1BBVEg9L2RhdGEiLCItZSIsIkdST1VQRE9DU19MSUNFTlNFX1BBVEg9IiwiZ2hjci5pby9ncm91cGRvY3Mtc2VhcmNoL3NlYXJjaC1uZXQtbWNwOmxhdGVzdCJdfQ%3D%3D
+
+## Badges
+
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install-0098FF)](https://vscode.dev/redirect/mcp/install?name=groupdocs-search&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22--rm%22%2C%22-i%22%2C%22-v%22%2C%22%2Fpath%2Fto%2Fdocuments%3A%2Fdata%22%2C%22-e%22%2C%22GROUPDOCS_MCP_STORAGE_PATH%3D%2Fdata%22%2C%22-e%22%2C%22GROUPDOCS_MCP_OUTPUT_PATH%3D%2Fdata%22%2C%22-e%22%2C%22GROUPDOCS_LICENSE_PATH%3D%22%2C%22ghcr.io%2Fgroupdocs-search%2Fsearch-net-mcp%3Alatest%22%5D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install-24bfa5)](https://insiders.vscode.dev/redirect/mcp/install?name=groupdocs-search&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22--rm%22%2C%22-i%22%2C%22-v%22%2C%22%2Fpath%2Fto%2Fdocuments%3A%2Fdata%22%2C%22-e%22%2C%22GROUPDOCS_MCP_STORAGE_PATH%3D%2Fdata%22%2C%22-e%22%2C%22GROUPDOCS_MCP_OUTPUT_PATH%3D%2Fdata%22%2C%22-e%22%2C%22GROUPDOCS_LICENSE_PATH%3D%22%2C%22ghcr.io%2Fgroupdocs-search%2Fsearch-net-mcp%3Alatest%22%5D%7D&quality=insiders)
+[![Add to Cursor](https://img.shields.io/badge/Cursor-Add_MCP-111111)](https://cursor.com/en/install-mcp?name=groupdocs-search&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItLXJtIiwiLWkiLCItdiIsIi9wYXRoL3RvL2RvY3VtZW50czovZGF0YSIsIi1lIiwiR1JPVVBET0NTX01DUF9TVE9SQUdFX1BBVEg9L2RhdGEiLCItZSIsIkdST1VQRE9DU19NQ1BfT1VUUFVUX1BBVEg9L2RhdGEiLCItZSIsIkdST1VQRE9DU19MSUNFTlNFX1BBVEg9IiwiZ2hjci5pby9ncm91cGRvY3Mtc2VhcmNoL3NlYXJjaC1uZXQtbWNwOmxhdGVzdCJdfQ%3D%3D)
