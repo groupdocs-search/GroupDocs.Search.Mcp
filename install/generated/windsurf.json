@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "groupdocs-search": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "-v", "/path/to/documents:/data", "-e", "GROUPDOCS_MCP_STORAGE_PATH=/data", "-e", "GROUPDOCS_MCP_OUTPUT_PATH=/data", "-e", "GROUPDOCS_LICENSE_PATH=", "ghcr.io/groupdocs-search/search-net-mcp:latest"]
+    }
+  }
+}
